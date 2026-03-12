@@ -20,6 +20,8 @@ const { createModuleLogger } = require('../services/logger');
 const { MiniProgramLoginSession } = require('../services/qrlogin');
 const { sendPushooMessage } = require('../services/push');
 const { getSchedulerRegistrySnapshot } = require('../services/scheduler');
+// 冲突1合并：保留原作者的fetchProfileByCode + 你的安全中间件
+const { fetchProfileByCode } = require('../services/manual-login-profile');
 const {
     rateLimitMiddleware,
     recordLoginAttempts,
@@ -87,6 +89,13 @@ function startAdminServer(dataProvider) {
     const sessions = createSessionManager();
 
     const authRequired = (req, res, next) => {
+        // 冲突2合并：保留原作者的「禁用密码认证」逻辑 + 你的「健壮token处理」
+        // 检查是否禁用了密码认证（原作者逻辑）
+        if (store.getDisablePasswordAuth && store.getDisablePasswordAuth()) {
+            return next();
+        }
+        
+        // 你的token处理逻辑（trim + sessions校验）
         const token = String(req.headers['x-admin-token'] || '').trim();
         const currentUser = sessions.getUser(token);
         if (!token || !currentUser) {
@@ -156,12 +165,14 @@ function startAdminServer(dataProvider) {
     });
 
     app.use('/api', (req, res, next) => {
+        // 冲突3合并：合并白名单（你的注册接口 + 原作者的密码认证状态接口）
         if (
             req.path === '/login'
-            || req.path === '/register'
+            || req.path === '/register'          // 你的新增
             || req.path === '/qr/create'
             || req.path === '/qr/check'
             || req.path === '/auth/validate'
+            || req.path === '/admin/password-auth-status' // 原作者的接口
         ) return next();
         return authRequired(req, res, next);
     });
@@ -264,20 +275,52 @@ function startAdminServer(dataProvider) {
         }
     });
 
+    // API: 获取密码认证状态
+    app.get('/api/admin/password-auth-status', (req, res) => {
+        try {
+            const disabled = store.getDisablePasswordAuth ? store.getDisablePasswordAuth() : false;
+            res.json({ ok: true, data: { disabled } });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    // API: 设置密码认证状态
+    app.post('/api/admin/toggle-password-auth', async (req, res) => {
+        try {
+            const body = req.body || {};
+            const disabled = Boolean(body.disabled);
+            
+            if (store.setDisablePasswordAuth) {
+                store.setDisablePasswordAuth(disabled);
+            }
+            res.json({ ok: true, data: { disabled } });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
     app.get('/api/ping', (req, res) => {
         res.json({ ok: true, data: { ok: true, uptime: process.uptime(), version } });
     });
 
     app.get('/api/auth/validate', (req, res) => {
+        // 如果禁用了密码认证，直接返回有效
+        if (store.getDisablePasswordAuth && store.getDisablePasswordAuth()) {
+            return res.json({ ok: true, data: { valid: true, passwordDisabled: true } });
+        }
+        
         const token = String(req.headers['x-admin-token'] || '').trim();
         const user = sessions.getUser(token);
         const valid = !!token && !!user;
         if (!valid) {
             return res.status(401).json({ ok: false, data: { valid: false }, error: 'Unauthorized' });
         }
-        res.json({ ok: true, data: { valid: true, user } });
+        // 冲突4合并：同时返回密码禁用状态 + 用户信息
+        res.json({ ok: true, data: { valid: true, passwordDisabled: false, user } });
     });
 
+    // 以下代码无冲突，省略重复部分（完整代码已包含所有逻辑）
     // API: 调度任务快照（用于调度收敛排查）
     app.get('/api/scheduler', async (req, res) => {
         try {
@@ -515,6 +558,88 @@ function startAdminServer(dataProvider) {
         res.json({ ok: true, data: saved });
     });
 
+    // API: 好友缓存
+    app.get('/api/friend-cache', async (req, res) => {
+        const id = getAccId(req);
+        if (!id) return res.status(400).json({ ok: false, error: 'Missing x-account-id' });
+        try {
+            const list = store.getFriendCache ? store.getFriendCache(id) : [];
+            return res.json({ ok: true, data: Array.isArray(list) ? list : [] });
+        } catch (e) {
+            return handleApiError(res, e);
+        }
+    });
+
+    app.post('/api/friend-cache/update-from-visitors', async (req, res) => {
+        const id = getAccId(req);
+        if (!id) return res.status(400).json({ ok: false, error: 'Missing x-account-id' });
+        try {
+            const friends = await provider.extractFriendsFromInteractRecords(id);
+            if (!Array.isArray(friends) || friends.length === 0) {
+                return res.json({ ok: true, data: store.getFriendCache ? store.getFriendCache(id) : [], message: '没有找到新的访客记录' });
+            }
+            const saved = store.updateFriendCache ? store.updateFriendCache(id, friends) : friends;
+            if (provider && typeof provider.broadcastConfig === 'function') {
+                provider.broadcastConfig(id);
+            }
+            return res.json({ ok: true, data: saved, message: '更新成功' });
+        } catch (e) {
+            return handleApiError(res, e);
+        }
+    });
+
+    app.post('/api/friend-cache/import-gids', (req, res) => {
+        const id = getAccId(req);
+        if (!id) return res.status(400).json({ ok: false, error: 'Missing x-account-id' });
+        try {
+            const input = req.body.gids;
+            let gids = [];
+            if (typeof input === 'string') {
+                gids = input.split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
+            } else if (Array.isArray(input)) {
+                gids = input;
+            }
+            const validGids = gids
+                .map(g => Number(g))
+                .filter(g => Number.isFinite(g) && g > 0);
+            if (validGids.length === 0) {
+                return res.json({ ok: false, error: '没有有效的 GID' });
+            }
+            const friends = validGids.map(gid => ({
+                gid,
+                nick: `GID:${gid}`,
+                avatarUrl: '',
+            }));
+            const saved = store.updateFriendCache ? store.updateFriendCache(id, friends) : friends;
+            if (provider && typeof provider.broadcastConfig === 'function') {
+                provider.broadcastConfig(id);
+            }
+            return res.json({ ok: true, data: saved, message: `已导入 ${validGids.length} 个 GID` });
+        } catch (e) {
+            return handleApiError(res, e);
+        }
+    });
+
+    app.delete('/api/friend-cache/:gid', (req, res) => {
+        const id = getAccId(req);
+        if (!id) return res.status(400).json({ ok: false, error: 'Missing x-account-id' });
+        const gid = Number(req.params.gid);
+        if (!gid || !Number.isFinite(gid)) {
+            return res.status(400).json({ ok: false, error: '无效的 GID' });
+        }
+        try {
+            const current = store.getFriendCache ? store.getFriendCache(id) : [];
+            const next = current.filter(f => f.gid !== gid);
+            const saved = store.setFriendCache ? store.setFriendCache(id, next) : next;
+            if (provider && typeof provider.broadcastConfig === 'function') {
+                provider.broadcastConfig(id);
+            }
+            return res.json({ ok: true, data: saved, message: `已删除 GID:${gid}` });
+        } catch (e) {
+            return handleApiError(res, e);
+        }
+    });
+
     // API: 种子列表
     app.get('/api/seeds', async (req, res) => {
         const id = getAccId(req);
@@ -664,6 +789,24 @@ function startAdminServer(dataProvider) {
             res.status(500).json({ ok: false, error: e.message });
         }
     });
+    // API: 保存运行时连接/设备配置
+    app.post('/api/settings/runtime-client', async (req, res) => {
+        try {
+            const body = (req.body && typeof req.body === 'object') ? req.body : {};
+            if (provider && typeof provider.setRuntimeClientConfig === 'function') {
+                const data = await provider.setRuntimeClientConfig(body);
+                return res.json({ ok: true, data: data || {} });
+            }
+            const saved = store.setRuntimeClientConfig ? store.setRuntimeClientConfig(body) : null;
+            if (provider && typeof provider.broadcastConfig === 'function') {
+                provider.broadcastConfig('');
+            }
+            return res.json({ ok: true, data: { runtimeClient: saved } });
+        } catch (e) {
+            return res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
     // API: 测试下线提醒推送（不落盘）
     app.post('/api/settings/offline-reminder/test', async (req, res) => {
         try {
@@ -725,7 +868,10 @@ function startAdminServer(dataProvider) {
             const qrLogin = store.getQrLoginConfig
                 ? store.getQrLoginConfig()
                 : { apiDomain: 'q.qq.com' };
-            res.json({ ok: true, data: { intervals, strategy, preferredSeed, bagSeedPriority, friendQuietHours, automation, ui, offlineReminder, qrLogin } });
+            const runtimeClient = store.getRuntimeClientConfig
+                ? store.getRuntimeClientConfig()
+                : null;
+            res.json({ ok: true, data: { intervals, strategy, preferredSeed, bagSeedPriority, friendQuietHours, automation, ui, offlineReminder, qrLogin, runtimeClient } });
         } catch (e) {
             res.status(500).json({ ok: false, error: e.message });
         }
@@ -773,14 +919,16 @@ function startAdminServer(dataProvider) {
         }
     });
 
-    app.post('/api/accounts', (req, res) => {
+    app.post('/api/accounts', async (req, res) => {
         try {
             const body = (req.body && typeof req.body === 'object') ? req.body : {};
             const isUpdate = !!body.id;
             const resolvedUpdateId = isUpdate ? resolveAccId(body.id) : '';
+            // 冲突5合并：你的payload处理逻辑 + 保留oldAccount变量
             const payload = isUpdate ? { ...body, id: resolvedUpdateId || String(body.id) } : body;
 
             let wasRunning = false;
+            let oldAccount = null; // 保留原作者的oldAccount变量（后续代码依赖）
             if (isUpdate) {
                 const targetAccount = getAccessibleAccount(req, payload.id);
                 payload.id = String(targetAccount.id || '');
@@ -796,8 +944,9 @@ function startAdminServer(dataProvider) {
 
             let onlyRemarkChanged = false;
             if (isUpdate) {
+                // 冲突6合并：你的权限过滤逻辑 + 保留oldAccount定义
                 const oldAccounts = getOwnedAccountList(req.currentUser);
-                const oldAccount = oldAccounts.accounts.find(a => a.id === payload.id);
+                oldAccount = oldAccounts.accounts.find(a => a.id === payload.id);
                 if (oldAccount) {
                     const payloadKeys = Object.keys(payload);
                     const onlyIdAndName = payloadKeys.length === 4
@@ -808,6 +957,37 @@ function startAdminServer(dataProvider) {
                     if (onlyIdAndName) {
                         onlyRemarkChanged = true;
                     }
+                }
+            }
+
+            const incomingCode = String(payload.code || '').trim();
+            const manualPlatform = String(payload.platform || (oldAccount && oldAccount.platform) || 'qq').trim().toLowerCase();
+            if (incomingCode) {
+                try {
+                    const basicProfile = await fetchProfileByCode(incomingCode, {
+                        platform: manualPlatform,
+                    });
+
+                    if (basicProfile.avatar) {
+                        payload.avatar = basicProfile.avatar;
+                        payload.avatarUrl = basicProfile.avatar;
+                    }
+                    if (basicProfile.gid > 0 && !String(payload.gid || '').trim()) {
+                        payload.gid = String(basicProfile.gid);
+                    }
+                    if (basicProfile.openId && !String(payload.openId || '').trim()) {
+                        payload.openId = basicProfile.openId;
+                    }
+
+                    const incomingName = String(payload.name || '').trim();
+                    if (!incomingName && basicProfile.name) {
+                        payload.name = basicProfile.name;
+                    }
+                } catch (error) {
+                    adminLogger.warn('fetch manual account profile failed', {
+                        error: error.message,
+                        accountId: payload.id || '',
+                    });
                 }
             }
 
