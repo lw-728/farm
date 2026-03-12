@@ -987,20 +987,15 @@ function addOrUpdateAccount(acc) {
     } else {
         const id = data.nextId++;
         touchedAccountId = String(id);
-// 冲突合并后的完整代码片段（含上下文）
-// 先构建原作者的默认名称逻辑
-const defaultName = String(
-    acc.name
-    || acc.nick
-    || (acc.gid ? `GID:${acc.gid}` : '')
-    || '',
-).trim() || `账号${id}`;
+        const defaultName = String(
+            acc.name
+            || acc.nick
+            || (acc.gid ? `GID:${acc.gid}` : '')
+            || '',
+        ).trim() || `账号${id}`;
 
-// 复用你的标准化函数，同时把默认名称传入（确保名称兜底）
-data.accounts.push(normalizeAccountRecord({
-    ...acc, // 保留原账号所有字段
-    name: acc.name || defaultName // 优先用acc.name，没有则用默认名称
-}));
+        data.accounts.push(normalizeAccountRecord({
+            ...acc,
             id: touchedAccountId,
             name: defaultName,
             code: acc.code || '',
