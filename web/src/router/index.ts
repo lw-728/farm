@@ -9,7 +9,6 @@ import 'nprogress/nprogress.css'
 NProgress.configure({ showSpinner: false })
 
 // 冲突合并：保留你的防重复请求变量 + 移除原作者的useStorage（改用pinia）
-let validatedToken = ''
 let validatingPromise: Promise<boolean> | null = null
 
 async function ensureTokenValid() {
@@ -34,14 +33,12 @@ async function ensureTokenValid() {
       
       // 原作者的核心逻辑：密码禁用时直接认为有效
       if (passwordDisabled) {
-        validatedToken = token
         authStore.setAuth(token, user || authStore.user || null)
         return true
       }
 
       // 你的逻辑：token有效时更新状态
       if (valid) {
-        validatedToken = token
         authStore.setAuth(token, user || authStore.user || null)
         return true
       }
@@ -83,7 +80,6 @@ router.beforeEach(async (to, _from) => {
   if (to.name === 'login') {
     // 你的逻辑：无token时清空状态，显示登录页
     if (!authStore.token) {
-      validatedToken = ''
       authStore.clearAuth()
       return true
     }
@@ -95,13 +91,11 @@ router.beforeEach(async (to, _from) => {
       
     // 校验失败时清空状态
     authStore.clearAuth()
-    validatedToken = ''
     return true
   }
 
   // 非登录页：无token直接跳登录
   if (!authStore.token) {
-    validatedToken = ''
     authStore.clearAuth()
     return { name: 'login' }
   }
@@ -110,7 +104,6 @@ router.beforeEach(async (to, _from) => {
   const valid = await ensureTokenValid()
   if (!valid) {
     authStore.clearAuth()
-    validatedToken = ''
     return { name: 'login' }
   }
 
