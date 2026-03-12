@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { storeToRefs } from 'pinia'
 import { computed, onMounted, ref, watch, watchEffect } from 'vue'
 import api from '@/api'
@@ -29,18 +29,19 @@ const offlineTesting = ref(false)
 const qrSaving = ref(false)
 const runtimeClientSaving = ref(false)
 
-// 瀵嗙爜璁よ瘉鐩稿叧鐘舵€?const passwordAuthDisabled = ref(false)
+// 密码认证相关状态
+const passwordAuthDisabled = ref(false)
 const passwordAuthLoading = ref(false)
 
 const token = computed(() => {
-  return localStorage.getItem('admin_token') || '鏈櫥褰?
+  return localStorage.getItem('admin_token') || '未登录'
 })
 
 function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text).then(() => {
-    toast.success('澶嶅埗鎴愬姛')
+    toast.success('复制成功')
   }).catch(() => {
-    toast.error('澶嶅埗澶辫触锛岃鎵嬪姩澶嶅埗')
+    toast.error('复制失败，请手动复制')
   })
 }
 
@@ -54,7 +55,7 @@ const modalConfig = ref({
 
 function showAlert(message: string, type: 'primary' | 'danger' = 'primary') {
   modalConfig.value = {
-    title: type === 'danger' ? '閿欒' : '鎻愮ず',
+    title: type === 'danger' ? '错误' : '提示',
     message,
     type,
     isAlert: true,
@@ -69,21 +70,21 @@ const currentAccountName = computed(() => {
 const allFertilizerLandTypes = ['gold', 'black', 'red', 'normal']
 
 const fertilizerBuyTypeOptions = [
-  { label: '浠呮湁鏈哄寲鑲?, value: 'organic' },
-  { label: '浠呮櫘閫氬寲鑲?, value: 'normal' },
-  { label: '涓よ€呴兘涔?, value: 'both' },
+  { label: '仅有机化肥', value: 'organic' },
+  { label: '仅普通化肥', value: 'normal' },
+  { label: '两者都买', value: 'both' },
 ]
 
 const fertilizerBuyModeOptions = [
-  { label: '瀹瑰櫒涓嶈冻鏃惰喘涔?, value: 'threshold' },
-  { label: '鏃犻檺璐拱', value: 'unlimited' },
+  { label: '容器不足时购买', value: 'threshold' },
+  { label: '无限购买', value: 'unlimited' },
 ]
 
 const fertilizerLandTypeOptions = [
-  { label: '閲戝湡鍦?, value: 'gold' },
-  { label: '榛戝湡鍦?, value: 'black' },
-  { label: '绾㈠湡鍦?, value: 'red' },
-  { label: '鏅€氬湡鍦?, value: 'normal' },
+  { label: '金土地', value: 'gold' },
+  { label: '黑土地', value: 'black' },
+  { label: '红土地', value: 'red' },
+  { label: '普通土地', value: 'normal' },
 ]
 
 function normalizeFertilizerLandTypes(input: unknown) {
@@ -294,10 +295,10 @@ const stealCropOptions = computed<StealCropOption[]>(() => {
   const byPlantId = new Map<number, StealCropOption>()
   const isPlaceholderName = (name: string, plantId: number) => {
     const normalized = String(name || '').trim()
-    return !normalized || normalized === `浣滅墿#${plantId}` || normalized === `娴ｆ粎澧?${plantId}`
+    return !normalized || normalized === `作物#${plantId}` || normalized === `浣滅墿#${plantId}`
   }
 
-  // 鍏堢敤鍒嗘瀽鏁版嵁浣滀负鍏ㄩ噺鍩哄噯锛岄伩鍏嶇櫥褰曞悗鍙樉绀哄晢搴楄繑鍥炵殑瀛愰泦
+  // 先用分析数据作为全量基准，避免登录后只显示商店返回的子集
   for (const meta of analyticsCropMetas.value) {
     const plantId = parsePositiveInt(meta?.plantId)
     if (plantId === null)
@@ -306,7 +307,7 @@ const stealCropOptions = computed<StealCropOption[]>(() => {
     byPlantId.set(plantId, {
       plantId,
       seedId: parsePositiveInt(meta?.seedId),
-      name: String(meta?.name || `浣滅墿#${plantId}`),
+      name: String(meta?.name || `作物#${plantId}`),
       level: normalizeAnalyticsCropLevel(meta?.level),
       image: String(meta?.image || '').trim(),
     })
@@ -322,7 +323,7 @@ const stealCropOptions = computed<StealCropOption[]>(() => {
     const next: StealCropOption = {
       plantId,
       seedId: seedIdFromSeed ?? analyticsMeta?.seedId ?? null,
-      name: String(seed?.name || analyticsMeta?.name || `浣滅墿#${plantId}`),
+      name: String(seed?.name || analyticsMeta?.name || `作物#${plantId}`),
       level: analyticsMeta?.level ?? resolveStealCropLevel(seed),
       image: resolveStealCropImage(seed) || String(analyticsMeta?.image || '').trim(),
     }
@@ -559,31 +560,31 @@ watch(currentAccountId, () => {
 })
 
 const fertilizerOptions = [
-  { label: '鏅€?+ 鏈夋満', value: 'both' },
-  { label: '浠呮櫘閫氬寲鑲?, value: 'normal' },
-  { label: '浠呮湁鏈哄寲鑲?, value: 'organic' },
-  { label: '涓嶆柦鑲?, value: 'none' },
+  { label: '普通 + 有机', value: 'both' },
+  { label: '仅普通化肥', value: 'normal' },
+  { label: '仅有机化肥', value: 'organic' },
+  { label: '不施肥', value: 'none' },
 ]
 
 const plantingStrategyOptions = [
-  { label: '浼樺厛鑳屽寘绉嶅瓙', value: 'bag_priority' },
-  { label: '浼樺厛绉嶆绉嶅瓙', value: 'preferred' },
-  { label: '鏈€楂樼瓑绾т綔鐗?, value: 'level' },
-  { label: '鏈€澶х粡楠?鏃?, value: 'max_exp' },
-  { label: '鏈€澶ф櫘閫氳偉缁忛獙/鏃?, value: 'max_fert_exp' },
-  { label: '鏈€澶у噣鍒╂鼎/鏃?, value: 'max_profit' },
-  { label: '鏈€澶ф櫘閫氳偉鍑€鍒╂鼎/鏃?, value: 'max_fert_profit' },
+  { label: '优先背包种子', value: 'bag_priority' },
+  { label: '优先种植种子', value: 'preferred' },
+  { label: '最高等级作物', value: 'level' },
+  { label: '最大经验/时', value: 'max_exp' },
+  { label: '最大普通肥经验/时', value: 'max_fert_exp' },
+  { label: '最大净利润/时', value: 'max_profit' },
+  { label: '最大普通肥净利润/时', value: 'max_fert_profit' },
 ]
 
 const channelOptions = [
-  { label: 'Webhook(鑷畾涔夋帴鍙?', value: 'webhook' },
-  { label: '鑷畾涔?JSON (Webhook)', value: 'custom_request' },
-  { label: 'Qmsg 閰?, value: 'qmsg' },
-  { label: 'Server 閰?, value: 'serverchan' },
+  { label: 'Webhook(自定义接口)', value: 'webhook' },
+  { label: '自定义 JSON (Webhook)', value: 'custom_request' },
+  { label: 'Qmsg 酱', value: 'qmsg' },
+  { label: 'Server 酱', value: 'serverchan' },
   { label: 'Push Plus', value: 'pushplus' },
   { label: 'Push Plus Hxtrip', value: 'pushplushxtrip' },
-  { label: '閽夐拤', value: 'dingtalk' },
-  { label: '浼佷笟寰俊', value: 'wecom' },
+  { label: '钉钉', value: 'dingtalk' },
+  { label: '企业微信', value: 'wecom' },
   { label: 'Bark', value: 'bark' },
   { label: 'Go-cqhttp', value: 'gocqhttp' },
   { label: 'OneBot', value: 'onebot' },
@@ -591,9 +592,9 @@ const channelOptions = [
   { label: 'PushDeer', value: 'pushdeer' },
   { label: 'iGot', value: 'igot' },
   { label: 'Telegram', value: 'telegram' },
-  { label: '椋炰功', value: 'feishu' },
+  { label: '飞书', value: 'feishu' },
   { label: 'IFTTT', value: 'ifttt' },
-  { label: '浼佷笟寰俊缇ゆ満鍣ㄤ汉', value: 'wecombot' },
+  { label: '企业微信群机器人', value: 'wecombot' },
   { label: 'Discord', value: 'discord' },
   { label: 'WxPusher', value: 'wxpusher' },
 ]
@@ -622,10 +623,10 @@ const CHANNEL_DOCS: Record<string, string> = {
 }
 
 const reloginUrlModeOptions = [
-  { label: '涓嶉渶瑕?, value: 'none' },
-  { label: '閾炬帴', value: 'qq_link' },
-  { label: '浜岀淮鐮?, value: 'qr_code' },
-  { label: '浜岀淮鐮?+ 閾炬帴', value: 'all' },
+  { label: '不需要', value: 'none' },
+  { label: '链接', value: 'qq_link' },
+  { label: '二维码', value: 'qr_code' },
+  { label: '二维码 + 链接', value: 'all' },
 ]
 
 const currentChannelDocUrl = computed(() => {
@@ -641,10 +642,10 @@ function openChannelDocs() {
 }
 
 const preferredSeedOptions = computed(() => {
-  const options = [{ label: '鑷姩閫夋嫨', value: 0 }]
+  const options = [{ label: '自动选择', value: 0 }]
   if (seeds.value) {
     options.push(...seeds.value.map(seed => ({
-      label: `${seed.requiredLevel}绾?${seed.name} (${seed.price}閲?`,
+      label: `${seed.requiredLevel}级 ${seed.name} (${seed.price}金)`,
       value: seed.seedId,
       disabled: seed.locked || seed.soldOut,
     })))
@@ -789,12 +790,12 @@ watchEffect(async () => {
   }
   const available = seeds.value.filter(s => !s.locked && !s.soldOut)
   if (available.length === 0) {
-    strategyPreviewLabel.value = '鏆傛棤鍙敤绉嶅瓙'
+    strategyPreviewLabel.value = '暂无可用种子'
     return
   }
   if (strategy === 'level') {
     const best = [...available].sort((a, b) => b.requiredLevel - a.requiredLevel)[0]
-    strategyPreviewLabel.value = best ? `${best.requiredLevel}绾?${best.name}` : null
+    strategyPreviewLabel.value = best ? `${best.requiredLevel}级 ${best.name}` : null
     return
   }
   const sortBy = analyticsSortByMap[strategy]
@@ -806,10 +807,10 @@ watchEffect(async () => {
       const match = rankings.find(r => availableIds.has(Number(r.seedId)))
       if (match) {
         const seed = available.find(s => s.seedId === Number(match.seedId))
-        strategyPreviewLabel.value = seed ? `${seed.requiredLevel}绾?${seed.name}` : null
+        strategyPreviewLabel.value = seed ? `${seed.requiredLevel}级 ${seed.name}` : null
       }
       else {
-        strategyPreviewLabel.value = '鏆傛棤鍖归厤绉嶅瓙'
+        strategyPreviewLabel.value = '暂无匹配种子'
       }
     }
     catch {
@@ -833,10 +834,10 @@ async function saveAccountSettings() {
   try {
     const res = await settingStore.saveSettings(currentAccountId.value, localSettings.value)
     if (res.ok) {
-      showAlert('璐﹀彿璁剧疆宸蹭繚瀛?)
+      showAlert('账号设置已保存')
     }
     else {
-      showAlert(`淇濆瓨澶辫触: ${res.error}`, 'danger')
+      showAlert(`保存失败: ${res.error}`, 'danger')
     }
   }
   finally {
@@ -846,15 +847,15 @@ async function saveAccountSettings() {
 
 async function handleChangePassword() {
   if (!passwordForm.value.old || !passwordForm.value.new) {
-    showAlert('璇峰～鍐欏畬鏁?, 'danger')
+    showAlert('请填写完整', 'danger')
     return
   }
   if (passwordForm.value.new !== passwordForm.value.confirm) {
-    showAlert('涓ゆ瀵嗙爜杈撳叆涓嶄竴鑷?, 'danger')
+    showAlert('两次密码输入不一致', 'danger')
     return
   }
   if (passwordForm.value.new.length < 4) {
-    showAlert('瀵嗙爜闀垮害鑷冲皯4浣?, 'danger')
+    showAlert('密码长度至少4位', 'danger')
     return
   }
 
@@ -863,11 +864,11 @@ async function handleChangePassword() {
     const res = await settingStore.changeAdminPassword(passwordForm.value.old, passwordForm.value.new)
 
     if (res.ok) {
-      showAlert('瀵嗙爜淇敼鎴愬姛')
+      showAlert('密码修改成功')
       passwordForm.value = { old: '', new: '', confirm: '' }
     }
     else {
-      showAlert(`淇敼澶辫触: ${res.error || '鏈煡閿欒'}`, 'danger')
+      showAlert(`修改失败: ${res.error || '未知错误'}`, 'danger')
     }
   }
   finally {
@@ -875,7 +876,8 @@ async function handleChangePassword() {
   }
 }
 
-// 鑾峰彇瀵嗙爜璁よ瘉鐘舵€?async function fetchPasswordAuthStatus() {
+// 获取密码认证状态
+async function fetchPasswordAuthStatus() {
   try {
     const { data } = await api.get('/api/admin/password-auth-status')
     if (data && data.ok) {
@@ -883,11 +885,12 @@ async function handleChangePassword() {
     }
   }
   catch (e) {
-    console.error('鑾峰彇瀵嗙爜璁よ瘉鐘舵€佸け璐?', e)
+    console.error('获取密码认证状态失败:', e)
   }
 }
 
-// 鍒囨崲瀵嗙爜璁よ瘉鐘舵€?async function handleTogglePasswordAuth() {
+// 切换密码认证状态
+async function handleTogglePasswordAuth() {
   passwordAuthLoading.value = true
   try {
     const { data } = await api.post('/api/admin/toggle-password-auth', {
@@ -896,14 +899,14 @@ async function handleChangePassword() {
 
     if (data && data.ok) {
       passwordAuthDisabled.value = data.data.disabled
-      showAlert(passwordAuthDisabled.value ? '宸茬鐢ㄥ瘑鐮佽璇? : '宸插惎鐢ㄥ瘑鐮佽璇?)
+      showAlert(passwordAuthDisabled.value ? '已禁用密码认证' : '已启用密码认证')
     }
     else {
-      showAlert(`鎿嶄綔澶辫触: ${data?.error || '鏈煡閿欒'}`, 'danger')
+      showAlert(`操作失败: ${data?.error || '未知错误'}`, 'danger')
     }
   }
   catch (e: any) {
-    showAlert(`鎿嶄綔澶辫触: ${e?.response?.data?.error || e?.message || '鏈煡閿欒'}`, 'danger')
+    showAlert(`操作失败: ${e?.response?.data?.error || e?.message || '未知错误'}`, 'danger')
   }
   finally {
     passwordAuthLoading.value = false
@@ -915,10 +918,10 @@ async function handleSaveQrLogin() {
   try {
     const res = await settingStore.saveQrLoginConfig(localQrLogin.value)
     if (res.ok) {
-      showAlert('浜岀淮鐮佹帴鍙ｈ缃凡淇濆瓨')
+      showAlert('二维码接口设置已保存')
     }
     else {
-      showAlert(`淇濆瓨澶辫触: ${res.error || '鏈煡閿欒'}`, 'danger')
+      showAlert(`保存失败: ${res.error || '未知错误'}`, 'danger')
     }
   }
   finally {
@@ -930,10 +933,10 @@ async function handleSaveRuntimeClient() {
   try {
     const res = await settingStore.saveRuntimeClientConfig(localRuntimeClient.value as any)
     if (res.ok) {
-      showAlert('杩愯鏃惰繛鎺ラ厤缃凡淇濆瓨锛岃繍琛屼腑璐﹀彿灏嗚嚜鍔ㄩ噸杩炵敓鏁?)
+      showAlert('运行时连接配置已保存，运行中账号将自动重连生效')
     }
     else {
-      showAlert(`淇濆瓨澶辫触: ${res.error || '鏈煡閿欒'}`, 'danger')
+      showAlert(`保存失败: ${res.error || '未知错误'}`, 'danger')
     }
   }
   finally {
@@ -950,10 +953,10 @@ async function handleSaveOffline() {
     const res = await settingStore.saveOfflineConfig(localOffline.value)
 
     if (res.ok) {
-      showAlert('涓嬬嚎鎻愰啋璁剧疆宸蹭繚瀛?)
+      showAlert('下线提醒设置已保存')
     }
     else {
-      showAlert(`淇濆瓨澶辫触: ${res.error || '鏈煡閿欒'}`, 'danger')
+      showAlert(`保存失败: ${res.error || '未知错误'}`, 'danger')
     }
   }
   finally {
@@ -966,15 +969,15 @@ async function handleTestOffline() {
   try {
     const { data } = await api.post('/api/settings/offline-reminder/test', localOffline.value)
     if (data?.ok) {
-      showAlert('娴嬭瘯娑堟伅鍙戦€佹垚鍔?)
+      showAlert('测试消息发送成功')
     }
     else {
-      showAlert(`娴嬭瘯澶辫触: ${data?.error || '鏈煡閿欒'}`, 'danger')
+      showAlert(`测试失败: ${data?.error || '未知错误'}`, 'danger')
     }
   }
   catch (e: any) {
-    const msg = e?.response?.data?.error || e?.message || '璇锋眰澶辫触'
-    showAlert(`娴嬭瘯澶辫触: ${msg}`, 'danger')
+    const msg = e?.response?.data?.error || e?.message || '请求失败'
+    showAlert(`测试失败: ${msg}`, 'danger')
   }
   finally {
     offlineTesting.value = false
@@ -986,7 +989,7 @@ async function handleTestOffline() {
   <div class="settings-page">
     <div v-if="loading" class="py-4 text-center text-gray-500">
       <div class="i-svg-spinners-ring-resize mx-auto mb-2 text-2xl" />
-      <p>鍔犺浇涓?..</p>
+      <p>加载中...</p>
     </div>
 
     <div v-else class="grid grid-cols-1 mt-12 gap-4 text-sm lg:grid-cols-2">
@@ -996,7 +999,7 @@ async function handleTestOffline() {
         <div class="border-b bg-gray-50/50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
           <h3 class="flex items-center gap-2 text-base text-gray-900 font-bold dark:text-gray-100">
             <div class="i-fas-cogs" />
-            绛栫暐璁剧疆
+            策略设置
             <span v-if="currentAccountName" class="ml-2 text-sm text-gray-500 font-normal dark:text-gray-400">
               ({{ currentAccountName }})
             </span>
@@ -1008,52 +1011,53 @@ async function handleTestOffline() {
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
             <BaseSelect
               v-model="localSettings.plantingStrategy"
-              label="绉嶆绛栫暐"
+              label="种植策略"
               :options="plantingStrategyOptions"
             />
             <BaseSelect
               v-if="localSettings.plantingStrategy === 'preferred'"
               v-model="localSettings.preferredSeedId"
-              label="浼樺厛绉嶆绉嶅瓙"
+              label="优先种植种子"
               :options="preferredSeedOptions"
             />
-            <!-- 棰勮鍖哄煙锛氫笌 BaseSelect 鍚岀粨鏋勫悓鏍峰紡锛岄伩鍏嶅垏鎹㈢瓥鐣ユ椂甯冨眬璺冲姩 -->
+            <!-- 预览区域：与 BaseSelect 同结构同样式，避免切换策略时布局跳动 -->
             <div v-else-if="localSettings.plantingStrategy !== 'bag_priority'" class="flex flex-col gap-1.5">
-              <label class="text-sm text-gray-700 font-medium dark:text-gray-300">绛栫暐閫夌棰勮</label>
+              <label class="text-sm text-gray-700 font-medium dark:text-gray-300">策略选种预览</label>
               <div
                 class="w-full flex items-center justify-between border border-gray-200 rounded-lg bg-gray-50 px-3 py-2 text-gray-500 dark:border-gray-600 dark:bg-gray-800/50 dark:text-gray-400"
               >
-                <span class="truncate">{{ strategyPreviewLabel ?? '鍔犺浇涓?..' }}</span>
+                <span class="truncate">{{ strategyPreviewLabel ?? '加载中...' }}</span>
                 <div class="i-carbon-chevron-down shrink-0 text-lg text-gray-400" />
               </div>
             </div>
           </div>
 
-          <!-- 鑳屽寘绉嶅瓙浼樺厛绾у垪琛?-->
+          <!-- 背包种子优先级列表 -->
           <div v-if="localSettings.plantingStrategy === 'bag_priority'" class="mt-3">
             <div class="mb-2 flex items-center justify-between">
-              <label class="text-sm text-gray-700 font-medium dark:text-gray-300">鑳屽寘绉嶅瓙浼樺厛绾?/label>
+              <label class="text-sm text-gray-700 font-medium dark:text-gray-300">背包种子优先级</label>
               <div class="flex items-center gap-2">
                 <button
                   class="text-xs text-blue-500 dark:text-blue-400 hover:text-blue-600"
                   @click="fetchBagSeeds"
                 >
-                  鍒锋柊
+                  刷新
                 </button>
                 <button
                   class="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-600"
                   @click="resetBagSeedPriority"
                 >
-                  閲嶇疆鎺掑簭
+                  重置排序
                 </button>
               </div>
             </div>
 
             <div v-if="bagSeedsLoading" class="py-4 text-center text-gray-500">
-              鍔犺浇涓?..
+              加载中...
             </div>
             <div v-else-if="sortedBagSeeds.length === 0" class="py-4 text-center text-gray-500 dark:text-gray-400">
-              鑳屽寘涓殏鏃犵瀛?            </div>
+              背包中暂无种子
+            </div>
             <div v-else class="max-h-64 overflow-y-auto space-y-1">
               <div
                 v-for="(seed, index) in sortedBagSeeds"
@@ -1081,11 +1085,11 @@ async function handleTestOffline() {
                     <span
                       v-if="seed.requiredLevel >= 200"
                       class="rounded bg-yellow-100 px-1.5 py-0.5 text-xs text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-400"
-                    >娲诲姩</span>
+                    >活动</span>
                     <span class="truncate text-sm text-gray-800 font-medium dark:text-gray-200">{{ seed.name }}</span>
                   </div>
                   <div class="text-xs text-gray-500 dark:text-gray-400">
-                    鏁伴噺: {{ seed.count }} | {{ seed.requiredLevel >= 200 ? '娲诲姩绉嶅瓙' : `${seed.requiredLevel}绾 }}
+                    数量: {{ seed.count }} | {{ seed.requiredLevel >= 200 ? '活动种子' : `${seed.requiredLevel}级` }}
                     <span v-if="seed.plantSize > 1"> | {{ seed.plantSize }}x{{ seed.plantSize }}</span>
                   </div>
                 </div>
@@ -1108,37 +1112,37 @@ async function handleTestOffline() {
               </div>
             </div>
             <div class="mt-2 text-xs text-gray-500 space-y-1 dark:text-gray-400">
-              <p>* 鎷栨嫿鎴栫偣鍑荤澶磋皟鏁寸妞嶄紭鍏堢骇</p>
-              <p>* 浠呮敮鎸?1x1 绉嶅瓙锛?x2 鍙婁互涓婄瀛愪細琚烦杩?/p>
-              <p>* 1x1 绉嶅瓙鐢ㄥ畬鍚庡皢鑷姩鍒囨崲涓?鏈€楂樼瓑绾?绛栫暐</p>
+              <p>* 拖拽或点击箭头调整种植优先级</p>
+              <p>* 仅支持 1x1 种子，2x2 及以上种子会被跳过</p>
+              <p>* 1x1 种子用完后将自动切换为"最高等级"策略</p>
             </div>
           </div>
 
           <div class="grid grid-cols-2 gap-3 md:grid-cols-4">
             <BaseInput
               v-model.number="localSettings.intervals.farmMin"
-              label="鍐滃満宸℃煡鏈€灏?(绉?"
+              label="农场巡查最小 (秒)"
               type="number"
               min="1"
               max="86400"
             />
             <BaseInput
               v-model.number="localSettings.intervals.farmMax"
-              label="鍐滃満宸℃煡鏈€澶?(绉?"
+              label="农场巡查最大 (秒)"
               type="number"
               min="1"
               max="86400"
             />
             <BaseInput
               v-model.number="localSettings.intervals.friendMin"
-              label="濂藉弸宸℃煡鏈€灏?(绉?"
+              label="好友巡查最小 (秒)"
               type="number"
               min="1"
               max="86400"
             />
             <BaseInput
               v-model.number="localSettings.intervals.friendMax"
-              label="濂藉弸宸℃煡鏈€澶?(绉?"
+              label="好友巡查最大 (秒)"
               type="number"
               min="1"
               max="86400"
@@ -1148,7 +1152,7 @@ async function handleTestOffline() {
           <div class="mt-4 flex flex-wrap items-center gap-4 border-t pt-3 dark:border-gray-700">
             <BaseSwitch
               v-model="localSettings.friendQuietHours.enabled"
-              label="鍚敤闈欓粯鏃舵"
+              label="启用静默时段"
             />
             <div class="flex items-center gap-2">
               <BaseInput
@@ -1172,7 +1176,7 @@ async function handleTestOffline() {
         <div class="border-b border-t bg-gray-50/50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
           <h3 class="flex items-center gap-2 text-base text-gray-900 font-bold dark:text-gray-100">
             <div class="i-fas-toggle-on" />
-            鑷姩鎺у埗
+            自动控制
           </h3>
         </div>
 
@@ -1180,43 +1184,43 @@ async function handleTestOffline() {
         <div class="flex-1 p-4 space-y-4">
           <!-- Switches Grid -->
           <div class="grid grid-cols-2 gap-3 md:grid-cols-3">
-            <BaseSwitch v-model="localSettings.automation.farm" label="鑷姩绉嶆鏀惰幏" />
-            <BaseSwitch v-model="localSettings.automation.farm_manage" label="鑷姩鎵撶悊鍐滃満" />
-            <BaseSwitch v-model="localSettings.automation.task" label="鑷姩鍋氫换鍔? />
-            <BaseSwitch v-model="localSettings.automation.sell" label="鑷姩鍗栨灉瀹? />
-            <BaseSwitch v-model="localSettings.automation.friend" label="鑷姩濂藉弸浜掑姩" />
-            <BaseSwitch v-model="localSettings.automation.farm_push" label="鎺ㄩ€佽Е鍙戝贰鐢? />
-            <BaseSwitch v-model="localSettings.automation.land_upgrade" label="鑷姩鍗囩骇鍦熷湴" />
-            <BaseSwitch v-model="localSettings.automation.email" label="鑷姩棰嗗彇閭欢" />
-            <BaseSwitch v-model="localSettings.automation.free_gifts" label="鑷姩鍟嗗煄绀煎寘" />
-            <BaseSwitch v-model="localSettings.automation.share_reward" label="鑷姩鍒嗕韩濂栧姳" />
-            <BaseSwitch v-model="localSettings.automation.vip_gift" label="鑷姩VIP绀煎寘" />
-            <BaseSwitch v-model="localSettings.automation.month_card" label="鑷姩鏈堝崱濂栧姳" />
-            <BaseSwitch v-model="localSettings.automation.open_server_gift" label="鑷姩寮€鏈嶇孩鍖? />
-            <BaseSwitch v-model="localSettings.automation.fertilizer_gift" label="鑷姩濉厖鍖栬偉" />
-            <BaseSwitch v-model="localSettings.automation.fertilizer_buy" label="鑷姩璐拱鍖栬偉" />
+            <BaseSwitch v-model="localSettings.automation.farm" label="自动种植收获" />
+            <BaseSwitch v-model="localSettings.automation.farm_manage" label="自动打理农场" />
+            <BaseSwitch v-model="localSettings.automation.task" label="自动做任务" />
+            <BaseSwitch v-model="localSettings.automation.sell" label="自动卖果实" />
+            <BaseSwitch v-model="localSettings.automation.friend" label="自动好友互动" />
+            <BaseSwitch v-model="localSettings.automation.farm_push" label="推送触发巡田" />
+            <BaseSwitch v-model="localSettings.automation.land_upgrade" label="自动升级土地" />
+            <BaseSwitch v-model="localSettings.automation.email" label="自动领取邮件" />
+            <BaseSwitch v-model="localSettings.automation.free_gifts" label="自动商城礼包" />
+            <BaseSwitch v-model="localSettings.automation.share_reward" label="自动分享奖励" />
+            <BaseSwitch v-model="localSettings.automation.vip_gift" label="自动VIP礼包" />
+            <BaseSwitch v-model="localSettings.automation.month_card" label="自动月卡奖励" />
+            <BaseSwitch v-model="localSettings.automation.open_server_gift" label="自动开服红包" />
+            <BaseSwitch v-model="localSettings.automation.fertilizer_gift" label="自动填充化肥" />
+            <BaseSwitch v-model="localSettings.automation.fertilizer_buy" label="自动购买化肥" />
           </div>
 
           <div v-if="localSettings.automation.fertilizer_buy" class="border border-cyan-200 rounded bg-cyan-50/60 p-3 dark:border-cyan-800/60 dark:bg-cyan-900/10">
             <div class="mb-2 text-sm text-cyan-800 font-medium dark:text-cyan-300">
-              璐拱鍖栬偉閰嶇疆
+              购买化肥配置
             </div>
             <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
               <BaseSelect
                 v-model="localSettings.automation.fertilizer_buy_type"
-                label="璐拱绉嶇被"
+                label="购买种类"
                 :options="fertilizerBuyTypeOptions"
               />
               <BaseSelect
                 v-model="localSettings.automation.fertilizer_buy_mode"
-                label="璐拱鏉′欢"
+                label="购买条件"
                 :options="fertilizerBuyModeOptions"
               />
             </div>
             <div class="grid grid-cols-1 mt-3 gap-3 md:grid-cols-2">
               <BaseInput
                 v-model.number="localSettings.automation.fertilizer_buy_max"
-                label="鏈疆鏈€澶氳喘涔版€绘暟锛堜釜锛?
+                label="本轮最多购买总数（个）"
                 type="number"
                 min="1"
                 max="10"
@@ -1224,30 +1228,31 @@ async function handleTestOffline() {
               <BaseInput
                 v-if="localSettings.automation.fertilizer_buy_mode === 'threshold'"
                 v-model.number="localSettings.automation.fertilizer_buy_threshold"
-                label="瀹瑰櫒浣庝簬姝ゅ皬鏃舵暟鏃惰喘涔?
+                label="容器低于此小时数时购买"
                 type="number"
                 min="0"
               />
             </div>
             <p v-if="localSettings.automation.fertilizer_buy_mode === 'threshold'" class="mt-2 text-xs text-cyan-700 dark:text-cyan-300">
-              闃堝€间负 0 琛ㄧず瀹瑰櫒绌轰簡鍐嶄拱銆?            </p>
+              阈值为 0 表示容器空了再买。
+            </p>
             <p v-if="localSettings.automation.fertilizer_buy_mode === 'unlimited'" class="mt-2 text-xs text-amber-600 dark:text-amber-400">
-              鏃犻檺璐拱妯″紡涓嬩笉鑳藉悓鏃堕€夋嫨涓ょ鍖栬偉
+              无限购买模式下不能同时选择两种化肥
             </p>
           </div>
 
           <!-- Sub-controls -->
           <div class="flex flex-wrap gap-4 rounded bg-emerald-50 p-2 text-sm dark:bg-emerald-900/20" :class="{ 'opacity-50 pointer-events-none': farmDisabled }">
-            <BaseSwitch v-model="localSettings.automation.farm_water" label="鑷姩娴囨按" :disabled="farmDisabled" />
-            <BaseSwitch v-model="localSettings.automation.farm_bug" label="鑷姩闄よ櫕" :disabled="farmDisabled" />
-            <BaseSwitch v-model="localSettings.automation.farm_weed" label="鑷姩闄よ崏" :disabled="farmDisabled" />
+            <BaseSwitch v-model="localSettings.automation.farm_water" label="自动浇水" :disabled="farmDisabled" />
+            <BaseSwitch v-model="localSettings.automation.farm_bug" label="自动除虫" :disabled="farmDisabled" />
+            <BaseSwitch v-model="localSettings.automation.farm_weed" label="自动除草" :disabled="farmDisabled" />
           </div>
 
           <div class="flex flex-wrap gap-4 rounded bg-blue-50 p-2 text-sm dark:bg-blue-900/20" :class="{ 'opacity-50 pointer-events-none': friendDisabled }">
-            <BaseSwitch v-model="localSettings.automation.friend_steal" label="鑷姩鍋疯彍" :disabled="friendDisabled" />
-            <BaseSwitch v-model="localSettings.automation.friend_help" label="鑷姩甯繖" :disabled="friendDisabled" />
-            <BaseSwitch v-model="localSettings.automation.friend_bad" label="鑷姩鎹ｄ贡" :disabled="friendDisabled" />
-            <BaseSwitch v-model="localSettings.automation.friend_help_exp_limit" label="缁忛獙涓婇檺鍋滄甯繖" :disabled="friendDisabled" />
+            <BaseSwitch v-model="localSettings.automation.friend_steal" label="自动偷菜" :disabled="friendDisabled" />
+            <BaseSwitch v-model="localSettings.automation.friend_help" label="自动帮忙" :disabled="friendDisabled" />
+            <BaseSwitch v-model="localSettings.automation.friend_bad" label="自动捣乱" :disabled="friendDisabled" />
+            <BaseSwitch v-model="localSettings.automation.friend_help_exp_limit" label="经验上限停止帮忙" :disabled="friendDisabled" />
           </div>
           <!-- Steal Crop Blacklist + Fertilizer -->
           <div class="space-y-3">
@@ -1260,14 +1265,15 @@ async function handleTestOffline() {
                   <div class="min-w-0">
                     <div class="flex items-center gap-2">
                       <div class="truncate text-base font-semibold">
-                        鎺掗櫎浣滅墿
+                        排除作物
                       </div>
                       <div class="border border-blue-300 rounded-full bg-white/95 px-2 py-0.5 text-xs text-blue-700 shadow-sm dark:border-blue-300/60 dark:bg-blue-500/15 dark:text-blue-100">
                         <span class="font-semibold">{{ stealBlacklistCount }} / {{ stealCropOptions.length }}</span>
                       </div>
                     </div>
                     <p class="text-xs text-blue-700/90 dark:text-blue-200/85">
-                      鍕鹃€夊悗锛岃嚜鍔ㄥ伔鑿滀細璺宠繃杩欎簺浣滅墿锛?                    </p>
+                      勾选后，自动偷菜会跳过这些作物；
+                    </p>
                   </div>
                 </div>
                 <button
@@ -1288,7 +1294,7 @@ async function handleTestOffline() {
 
                 <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
                   <div class="text-xs text-blue-700/90 dark:text-blue-200/90">
-                    鏀寔鎸変綔鐗╁悕鎴?seedid 鎼滅储
+                    支持按作物名或 seedid 搜索
                   </div>
                   <div class="flex items-center justify-end gap-2">
                     <BaseButton
@@ -1298,7 +1304,8 @@ async function handleTestOffline() {
                       :disabled="stealBlacklistCount >= stealCropOptions.length"
                       @click="filterUnselectedStealCrops"
                     >
-                      鎺掗櫎绛涢€?                    </BaseButton>
+                      排除筛选
+                    </BaseButton>
                     <BaseButton
                       variant="ghost"
                       size="sm"
@@ -1306,7 +1313,7 @@ async function handleTestOffline() {
                       :disabled="!stealBlacklistSearch && !onlyShowUnselectedStealCrops"
                       @click="clearStealFilter"
                     >
-                      娓呯┖
+                      清空
                     </BaseButton>
                   </div>
                 </div>
@@ -1318,7 +1325,7 @@ async function handleTestOffline() {
                   <input
                     v-model="stealBlacklistSearch"
                     type="text"
-                    placeholder="鎼滅储浣滅墿鍚嶆垨 Seed ID"
+                    placeholder="搜索作物名或 Seed ID"
                     class="w-full border border-blue-200 rounded-lg bg-white py-2 pl-9 pr-3 text-sm text-gray-700 outline-none dark:border-blue-400/40 focus:border-blue-400 dark:bg-[#1c2b45] dark:text-blue-50 placeholder:text-gray-400 focus:ring-2 focus:ring-blue-300/20 dark:focus:border-blue-300/70 dark:placeholder:text-blue-200/50"
                   >
                 </div>
@@ -1359,15 +1366,17 @@ async function handleTestOffline() {
                     </button>
                   </div>
                   <div v-else class="rounded bg-white px-2 py-2 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                    鏈壘鍒板尮閰嶄綔鐗╋紝璇疯皟鏁村叧閿瘝鍚庨噸璇曘€?                  </div>
+                    未找到匹配作物，请调整关键词后重试。
+                  </div>
                 </div>
                 <div v-else class="rounded bg-white px-2 py-2 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
-                  鏆傛棤鍙€変綔鐗╋紝璇峰厛绛夊緟绉嶅瓙鍒楄〃鍔犺浇瀹屾垚銆?                </div>
+                  暂无可选作物，请先等待种子列表加载完成。
+                </div>
               </div>
             </div>
             <div class="border border-amber-200 rounded bg-amber-50/60 p-3 dark:border-amber-800/60 dark:bg-amber-900/10">
               <div class="mb-2 text-sm text-amber-800 font-medium dark:text-amber-300">
-                鏂借偉鑼冨洿
+                施肥范围
               </div>
               <div class="grid grid-cols-2 gap-2 md:grid-cols-4">
                 <label
@@ -1385,18 +1394,19 @@ async function handleTestOffline() {
                 </label>
               </div>
               <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                鏂借偉鍓嶄細浼樺厛鎸夊湡鍦扮被鍨嬭繃婊わ紝浠呭鍛戒腑鑼冨洿鐨勫湴鍧楁墽琛屾柦鑲ョ瓥鐣ャ€?              </p>
+                施肥前会优先按土地类型过滤，仅对命中范围的地块执行施肥策略。
+              </p>
             </div>
             <div class="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
               <BaseSelect
                 v-model="localSettings.automation.fertilizer"
-                label="鏂借偉绛栫暐"
+                label="施肥策略"
                 class="w-full"
                 :options="fertilizerOptions"
               />
               <BaseSwitch
                 v-model="localSettings.automation.fertilizer_multi_season"
-                label="澶氬琛ヨ偉"
+                label="多季补肥"
                 class="md:mb-2"
               />
             </div>
@@ -1411,7 +1421,8 @@ async function handleTestOffline() {
             :loading="saving"
             @click="saveAccountSettings"
           >
-            淇濆瓨绛栫暐涓庤嚜鍔ㄦ帶鍒?          </BaseButton>
+            保存策略与自动控制
+          </BaseButton>
         </div>
       </div>
 
@@ -1421,9 +1432,11 @@ async function handleTestOffline() {
         </div>
         <div class="max-w-xs">
           <h3 class="text-lg text-gray-900 font-medium dark:text-gray-100">
-            闇€瑕佺櫥褰曡处鍙?          </h3>
+            需要登录账号
+          </h3>
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            璇峰厛鐧诲綍璐﹀彿浠ラ厤缃瓥鐣ュ拰鑷姩鍖栭€夐」銆?          </p>
+            请先登录账号以配置策略和自动化选项。
+          </p>
         </div>
       </div>
 
@@ -1433,7 +1446,7 @@ async function handleTestOffline() {
         <div class="border-b bg-gray-50/50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
           <h3 class="flex items-center gap-2 text-base text-gray-900 font-bold dark:text-gray-100">
             <div class="i-carbon-password" />
-            绠＄悊瀵嗙爜
+            管理密码
           </h3>
         </div>
 
@@ -1442,27 +1455,27 @@ async function handleTestOffline() {
           <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
             <BaseInput
               v-model="passwordForm.old"
-              label="褰撳墠瀵嗙爜"
+              label="当前密码"
               type="password"
-              placeholder="褰撳墠绠＄悊瀵嗙爜"
+              placeholder="当前管理密码"
             />
             <BaseInput
               v-model="passwordForm.new"
-              label="鏂板瘑鐮?
+              label="新密码"
               type="password"
-              placeholder="鑷冲皯 4 浣?
+              placeholder="至少 4 位"
             />
             <BaseInput
               v-model="passwordForm.confirm"
-              label="纭鏂板瘑鐮?
+              label="确认新密码"
               type="password"
-              placeholder="鍐嶆杈撳叆鏂板瘑鐮?
+              placeholder="再次输入新密码"
             />
           </div>
 
           <div class="flex items-center justify-between pt-1">
             <p class="text-xs text-gray-500">
-              寤鸿淇敼榛樿瀵嗙爜 (admin)
+              建议修改默认密码 (admin)
             </p>
             <BaseButton
               variant="primary"
@@ -1470,19 +1483,20 @@ async function handleTestOffline() {
               :loading="passwordSaving"
               @click="handleChangePassword"
             >
-              淇敼绠＄悊瀵嗙爜
+              修改管理密码
             </BaseButton>
           </div>
 
-          <!-- 鍙栨秷瀵嗙爜璁块棶鍔熻兘 -->
+          <!-- 取消密码访问功能 -->
           <div class="mt-4 border-t pt-4 dark:border-gray-700">
             <div class="mb-3 flex items-center justify-between">
               <div>
                 <h4 class="text-sm text-gray-900 font-medium dark:text-gray-100">
-                  鍙栨秷瀵嗙爜璁块棶
+                  取消密码访问
                 </h4>
                 <p class="text-xs text-gray-500 dark:text-gray-400">
-                  寮€鍚悗鏃犻渶杈撳叆绠＄悊鍛樺瘑鐮佸嵆鍙洿鎺ヨ繘鍏ョ晫闈?                </p>
+                  开启后无需输入管理员密码即可直接进入界面
+                </p>
               </div>
               <BaseSwitch
                 :model-value="passwordAuthDisabled"
@@ -1494,7 +1508,7 @@ async function handleTestOffline() {
             <div v-if="passwordAuthDisabled" class="mt-2 rounded bg-orange-50 p-2 text-xs text-orange-700 dark:bg-orange-900/20 dark:text-orange-300">
               <div class="flex items-center gap-1">
                 <div class="i-carbon-warning-alt" />
-                <span>瀹夊叏鎻愰啋锛氬凡绂佺敤瀵嗙爜璁よ瘉锛屼换浣曚汉閮藉彲浠ヨ闂鐞嗛潰鏉?/span>
+                <span>安全提醒：已禁用密码认证，任何人都可以访问管理面板</span>
               </div>
             </div>
           </div>
@@ -1504,7 +1518,8 @@ async function handleTestOffline() {
         <div class="border-b border-t bg-gray-50/50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
           <h3 class="flex items-center gap-2 text-base text-gray-900 font-bold dark:text-gray-100">
             <div class="i-carbon-connection-signal" />
-            杩愯鏃惰繛鎺ラ厤缃?          </h3>
+            运行时连接配置
+          </h3>
         </div>
 
         <!-- Runtime Client Content -->
@@ -1512,56 +1527,57 @@ async function handleTestOffline() {
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
             <BaseInput
               v-model="localRuntimeClient.serverUrl"
-              label="鏈嶅姟鍣?WS 鍦板潃"
+              label="服务器 WS 地址"
               type="text"
               placeholder="wss://.../ws"
             />
             <BaseInput
               v-model="localRuntimeClient.clientVersion"
-              label="娓告垙鐗堟湰鍙?
+              label="游戏版本号"
               type="text"
-              placeholder="渚嬪: 1.6.2.18_20260227"
+              placeholder="例如: 1.6.2.18_20260227"
             />
           </div>
 
           <BaseSelect
             v-model="localRuntimeClient.os"
-            label="绯荤粺 (os)"
+            label="系统 (os)"
             :options="[{ label: 'iOS', value: 'iOS' }, { label: 'Android', value: 'Android' }]"
           />
 
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
             <BaseInput
               v-model="localRuntimeClient.device_info.sys_software"
-              label="绯荤粺鐗堟湰鍙?
+              label="系统版本号"
               type="text"
-              placeholder="渚嬪: iOS 26.2.1"
+              placeholder="例如: iOS 26.2.1"
             />
             <BaseInput
               v-model="localRuntimeClient.device_info.network"
-              label="缃戠粶绫诲瀷"
+              label="网络类型"
               type="text"
-              placeholder="渚嬪: wifi"
+              placeholder="例如: wifi"
             />
           </div>
 
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
             <BaseInput
               v-model="localRuntimeClient.device_info.memory"
-              label="鍐呭瓨澶у皬锛堝崟浣峂B锛?
+              label="内存大小（单位MB）"
               type="text"
-              placeholder="渚嬪: 7672"
+              placeholder="例如: 7672"
             />
             <BaseInput
               v-model="localRuntimeClient.device_info.device_id"
-              label="璁惧ID"
+              label="设备ID"
               type="text"
-              placeholder="渚嬪: iPhone X<iPhone18,3>"
+              placeholder="例如: iPhone X<iPhone18,3>"
             />
           </div>
 
           <p class="text-xs text-gray-500 dark:text-gray-400">
-            淇濆瓨鍚庯紝杩愯涓殑璐﹀彿浼氳嚜鍔ㄩ噸杩炰互鐢熸晥銆?          </p>
+            保存后，运行中的账号会自动重连以生效。
+          </p>
 
           <div class="flex justify-end">
             <BaseButton
@@ -1570,7 +1586,8 @@ async function handleTestOffline() {
               :loading="runtimeClientSaving"
               @click="handleSaveRuntimeClient"
             >
-              淇濆瓨杩愯鏃惰繛鎺ラ厤缃?            </BaseButton>
+              保存运行时连接配置
+            </BaseButton>
           </div>
         </div>
 
@@ -1578,19 +1595,21 @@ async function handleTestOffline() {
         <div class="border-b border-t bg-gray-50/50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
           <h3 class="flex items-center gap-2 text-base text-gray-900 font-bold dark:text-gray-100">
             <div class="i-carbon-qr-code" />
-            浜岀淮鐮佺櫥褰曟帴鍙?          </h3>
+            二维码登录接口
+          </h3>
         </div>
 
         <!-- QR Login Content -->
         <div class="p-4 space-y-3">
           <BaseInput
             v-model="localQrLogin.apiDomain"
-            label="浜岀淮鐮佹帴鍙ｅ煙鍚?
+            label="二维码接口域名"
             type="text"
             placeholder="q.qq.com"
           />
           <p class="text-xs text-gray-500 dark:text-gray-400">
-            浠呭奖鍝嶅悗绔皟鐢ㄤ簩缁寸爜鐩稿叧鎺ュ彛鐨勫煙鍚嶏紝鍓嶇浠嶄娇鐢?/api/qr/create 涓?/api/qr/check銆?          </p>
+            仅影响后端调用二维码相关接口的域名，前端仍使用 /api/qr/create 与 /api/qr/check。
+          </p>
           <div class="flex justify-end">
             <BaseButton
               variant="primary"
@@ -1598,14 +1617,15 @@ async function handleTestOffline() {
               :loading="qrSaving"
               @click="handleSaveQrLogin"
             >
-              淇濆瓨浜岀淮鐮佹帴鍙ｈ缃?            </BaseButton>
+              保存二维码接口设置
+            </BaseButton>
           </div>
         </div>
         <!-- Offline Header -->
         <div class="border-b bg-gray-50/50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
           <h3 class="flex items-center gap-2 text-base text-gray-900 font-bold dark:text-gray-100">
             <div class="i-carbon-notification" />
-            涓嬬嚎鎻愰啋
+            下线提醒
           </h3>
         </div>
 
@@ -1614,14 +1634,14 @@ async function handleTestOffline() {
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div class="flex flex-col gap-1.5">
               <div class="flex items-center justify-between">
-                <span class="text-sm text-gray-700 font-medium dark:text-gray-300">鎺ㄩ€佹笭閬?/span>
+                <span class="text-sm text-gray-700 font-medium dark:text-gray-300">推送渠道</span>
                 <BaseButton
                   variant="text"
                   size="sm"
                   :disabled="!currentChannelDocUrl"
                   @click="openChannelDocs"
                 >
-                  瀹樼綉
+                  官网
                 </BaseButton>
               </div>
               <BaseSelect
@@ -1631,14 +1651,14 @@ async function handleTestOffline() {
             </div>
             <BaseSelect
               v-model="localOffline.reloginUrlMode"
-              label="閲嶇櫥褰曢摼鎺?
+              label="重登录链接"
               :options="reloginUrlModeOptions"
             />
           </div>
 
           <BaseInput
             v-model="localOffline.endpoint"
-            label="鎺ュ彛鍦板潃"
+            label="接口地址"
             type="text"
             :disabled="localOffline.channel !== 'webhook' && localOffline.channel !== 'custom_request'"
           />
@@ -1647,27 +1667,27 @@ async function handleTestOffline() {
             v-model="localOffline.token"
             label="Token"
             type="text"
-            placeholder="鎺ユ敹绔?token"
+            placeholder="接收端 token"
           />
 
           <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
             <BaseInput
               v-model="localOffline.title"
-              label="鏍囬"
+              label="标题"
               type="text"
-              placeholder="鎻愰啋鏍囬"
+              placeholder="提醒标题"
             />
             <div class="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
               <BaseInput
                 v-model.number="localOffline.offlineDeleteSec"
-                label="绂荤嚎鍒犻櫎璐﹀彿 (绉?"
+                label="离线删除账号 (秒)"
                 type="number"
                 min="1"
-                placeholder="榛樿 1"
+                placeholder="默认 1"
               />
               <BaseSwitch
                 v-model="localOffline.offlineDeleteEnabled"
-                label="鍚敤绂荤嚎鍒犲彿"
+                label="启用离线删号"
                 class="md:mb-2"
               />
             </div>
@@ -1675,21 +1695,21 @@ async function handleTestOffline() {
 
           <BaseInput
             v-model="localOffline.msg"
-            label="鍐呭"
+            label="内容"
             type="text"
-            placeholder="鎻愰啋鍐呭"
+            placeholder="提醒内容"
           />
 
           <template v-if="localOffline.channel === 'custom_request'">
             <BaseTextarea
               v-model="localOffline.custom_headers"
-              label="Headers (涓ユ牸 JSON)"
-              placeholder="渚嬪: {&quot;Content-Type&quot;: &quot;application/json&quot;, &quot;Authorization&quot;: &quot;Bearer TOKEN&quot;}"
+              label="Headers (严格 JSON)"
+              placeholder="例如: {&quot;Content-Type&quot;: &quot;application/json&quot;, &quot;Authorization&quot;: &quot;Bearer TOKEN&quot;}"
             />
             <BaseTextarea
               v-model="localOffline.custom_body"
-              label="Body (涓ユ牸 JSON, 鍗犱綅绗︽敮鎸?{{title}}锛堟爣棰橈級 {{content}}锛堝唴瀹癸級)"
-              placeholder="渚嬪: { &quot;title&quot;: &quot;{{title}}&quot;, &quot;message&quot;: &quot;{{content}}&quot; }"
+              label="Body (严格 JSON, 占位符支持 {{title}}（标题） {{content}}（内容）)"
+              placeholder="例如: { &quot;title&quot;: &quot;{{title}}&quot;, &quot;message&quot;: &quot;{{content}}&quot; }"
             />
           </template>
 
@@ -1702,7 +1722,7 @@ async function handleTestOffline() {
               :disabled="offlineSaving"
               @click="handleTestOffline"
             >
-              娴嬭瘯閫氱煡
+              测试通知
             </BaseButton>
             <BaseButton
               variant="primary"
@@ -1711,7 +1731,7 @@ async function handleTestOffline() {
               :disabled="offlineTesting"
               @click="handleSaveOffline"
             >
-              淇濆瓨涓嬬嚎鎻愰啋璁剧疆
+              保存下线提醒设置
             </BaseButton>
           </div>
         </div>
@@ -1720,7 +1740,7 @@ async function handleTestOffline() {
         <div class="border-t bg-gray-50/50 px-4 py-3 dark:border-gray-700 dark:bg-gray-800/50">
           <h3 class="flex items-center gap-2 text-base text-gray-900 font-bold dark:text-gray-100">
             <div class="i-carbon-code" />
-            璇锋眰鍙傛暟淇℃伅
+            请求参数信息
           </h3>
         </div>
 
@@ -1734,17 +1754,18 @@ async function handleTestOffline() {
               class="flex-1 border border-gray-200 rounded-lg bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
             >
             <BaseButton
-              v-if="token !== '鏈櫥褰?"
+              v-if="token !== '未登录'"
               variant="secondary"
               size="sm"
               @click="copyToClipboard(token)"
             >
               <div class="i-carbon-copy mr-1" />
-              澶嶅埗
+              复制
             </BaseButton>
           </div>
           <p class="text-xs text-gray-500 dark:text-gray-400">
-            x-admin-token 鐢ㄤ簬API璇锋眰璁よ瘉锛屽鍒跺悗鍙敤浜庣涓夋柟宸ュ叿璋冪敤鎺ュ彛銆?          </p>
+            x-admin-token 用于API请求认证，复制后可用于第三方工具调用接口。
+          </p>
         </div>
       </div>
     </div>
@@ -1755,7 +1776,7 @@ async function handleTestOffline() {
       :message="modalConfig.message"
       :type="modalConfig.type"
       :is-alert="modalConfig.isAlert"
-      confirm-text="鐭ラ亾浜?
+      confirm-text="知道了"
       @confirm="modalVisible = false"
       @cancel="modalVisible = false"
     />
@@ -1763,5 +1784,5 @@ async function handleTestOffline() {
 </template>
 
 <style scoped lang="postcss">
-/* 绉嶅瓙鍒楄〃鎷栨嫿鎺掑簭鍔ㄧ敾 */
+/* 种子列表拖拽排序动画 */
 </style>
