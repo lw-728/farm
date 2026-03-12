@@ -1,46 +1,60 @@
-import { useStorage } from '@vueuse/core'
 import axios from 'axios'
 import NProgress from 'nprogress'
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import { pinia } from '@/stores'
 import { menuRoutes } from './menu'
 import 'nprogress/nprogress.css'
 
 NProgress.configure({ showSpinner: false })
 
-const adminToken = useStorage('admin_token', '')
+// 冲突合并：保留你的防重复请求变量 + 移除原作者的useStorage（改用pinia）
+let validatedToken = ''
+let validatingPromise: Promise<boolean> | null = null
 
 async function ensureTokenValid() {
-  const token = String(adminToken.value || '').trim()
+  // 冲突合并：保留你的pinia逻辑 + 原作者的token获取逻辑
+  const authStore = useAuthStore(pinia)
+  const token = String(authStore.token || '').trim()
+  
+  // 无token时直接返回false（你的逻辑）
+  if (!token)
+    return false
 
-  // 首先检查是否禁用了密码认证
-  try {
-    const authCheckResponse = await axios.get('/api/auth/validate', {
-      headers: token ? { 'x-admin-token': token } : {},
-      timeout: 6000,
-    })
+  // 冲突合并：保留你的防重复请求逻辑 + 恢复原作者的密码禁用判断
+  if (validatingPromise)
+    return validatingPromise
 
-    if (authCheckResponse.data && authCheckResponse.data.ok) {
-      const { valid, passwordDisabled } = authCheckResponse.data.data
-
-      // 如果禁用了密码认证，直接返回true
+  validatingPromise = axios.get('/api/auth/validate', {
+    headers: { 'x-admin-token': token },
+    timeout: 6000,
+  }).then((res) => {
+    if (res.data && res.data.ok) {
+      const { valid, passwordDisabled, user } = res.data.data
+      
+      // 原作者的核心逻辑：密码禁用时直接认为有效
       if (passwordDisabled) {
+        validatedToken = token
+        authStore.setAuth(token, user || authStore.user || null)
         return true
       }
 
-      // 如果启用了密码认证，检查token有效性
-      if (valid && token) {
+      // 你的逻辑：token有效时更新状态
+      if (valid) {
+        validatedToken = token
+        authStore.setAuth(token, user || authStore.user || null)
         return true
       }
     }
+    return false
+  }).catch(() => false).finally(() => {
+    validatingPromise = null
+  })
 
-    return false
-  }
-  catch {
-    return false
-  }
+  return validatingPromise
 }
 
-const router = createRouter({
+export const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
@@ -63,22 +77,40 @@ const router = createRouter({
 router.beforeEach(async (to, _from) => {
   NProgress.start()
 
-  // 首先检查是否禁用了密码认证
-  const authValid = await ensureTokenValid()
+  // 冲突合并：整合你的pinia逻辑 + 原作者的密码禁用场景处理
+  const authStore = useAuthStore(pinia)
 
   if (to.name === 'login') {
-    // 如果已经通过认证（包括禁用密码认证的情况），跳转到首页
-    if (authValid) {
-      return { name: 'dashboard' }
+    // 你的逻辑：无token时清空状态，显示登录页
+    if (!authStore.token) {
+      validatedToken = ''
+      authStore.clearAuth()
+      return true
     }
-    // 否则显示登录页
+    
+    // 合并逻辑：校验token（包含密码禁用场景）
+    const valid = await ensureTokenValid()
+    if (valid)
+      return { name: 'dashboard' }
+      
+    // 校验失败时清空状态
+    authStore.clearAuth()
+    validatedToken = ''
     return true
   }
 
-  // 对于其他页面，检查认证状态
-  if (!authValid) {
-    // 如果认证失败，清除token并跳转到登录页
-    adminToken.value = ''
+  // 非登录页：无token直接跳登录
+  if (!authStore.token) {
+    validatedToken = ''
+    authStore.clearAuth()
+    return { name: 'login' }
+  }
+
+  // 合并逻辑：校验token（包含密码禁用场景）
+  const valid = await ensureTokenValid()
+  if (!valid) {
+    authStore.clearAuth()
+    validatedToken = ''
     return { name: 'login' }
   }
 

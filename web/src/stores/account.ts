@@ -10,7 +10,17 @@ export interface Account {
   uin?: number
   platform?: string
   running?: boolean
-  // Add other fields as discovered
+  ownerUserId?: number
+  ownerUsername?: string
+  belongsToCurrentUser?: boolean
+  visibleStatus?: 'running' | 'error' | 'stopped'
+  hasError?: boolean
+}
+
+export interface AccountStats {
+  total: number
+  running: number
+  error: number
 }
 
 export interface AccountLog {
@@ -41,26 +51,58 @@ export const useAccountStore = defineStore('account', () => {
   const currentAccountId = useStorage('current_account_id', '')
   const loading = ref(false)
   const logs = ref<AccountLog[]>([])
+  const stats = ref<AccountStats>({
+    total: 0,
+    running: 0,
+    error: 0,
+  })
 
   const currentAccount = computed(() =>
-    accounts.value.find(a => String(a.id) === currentAccountId.value),
+    accounts.value.find((a: Account) => String(a.id) === currentAccountId.value),
+  )
+
+  const runningAccounts = computed(() =>
+    accounts.value.filter((account: Account) => account.visibleStatus === 'running'),
+  )
+
+  const errorAccounts = computed(() =>
+    accounts.value.filter((account: Account) =>
+      account.visibleStatus === 'error' || account.visibleStatus === 'stopped',
+    ),
   )
 
   async function fetchAccounts() {
     loading.value = true
     try {
-      // api interceptor adds x-admin-token
       const res = await api.get('/api/accounts')
       if (res.data.ok && res.data.data && res.data.data.accounts) {
-        accounts.value = res.data.data.accounts
+        accounts.value = Array.isArray(res.data.data.accounts) ? res.data.data.accounts : []
 
-        // Auto-select first account if none selected or selected not found
+        const total = accounts.value.length
+        const running = accounts.value.filter((account: Account) => account.visibleStatus === 'running').length
+        const error = accounts.value.filter((account: Account) =>
+          account.visibleStatus === 'error' || account.visibleStatus === 'stopped',
+        ).length
+
+        stats.value = {
+          total,
+          running,
+          error,
+        }
+
         if (accounts.value.length > 0) {
-          const found = accounts.value.find(a => String(a.id) === currentAccountId.value)
+          const found = accounts.value.find((a: Account) => String(a.id) === currentAccountId.value)
           if (!found && accounts.value[0]) {
             currentAccountId.value = String(accounts.value[0].id)
           }
         }
+        else {
+          currentAccountId.value = ''
+        }
+      }
+      else {
+        accounts.value = []
+        stats.value = { total: 0, running: 0, error: 0 }
       }
     }
     catch (e) {
@@ -122,7 +164,6 @@ export const useAccountStore = defineStore('account', () => {
 
   async function updateAccount(id: string, payload: any) {
     try {
-      // core uses POST /api/accounts for both add and update (if id is present)
       await api.post('/api/accounts', { ...payload, id })
       await fetchAccounts()
     }
@@ -138,6 +179,9 @@ export const useAccountStore = defineStore('account', () => {
     currentAccount,
     loading,
     logs,
+    stats,
+    runningAccounts,
+    errorAccounts,
     fetchAccounts,
     selectAccount,
     startAccount,

@@ -931,9 +931,34 @@ function getAccounts() {
     return loadAccounts();
 }
 
+function normalizeAccountRecord(raw) {
+    const src = raw && typeof raw === 'object' ? raw : {};
+    const id = String(src.id || '').trim();
+    const ownerUserId = Number.parseInt(src.ownerUserId, 10);
+    const createdAt = Number(src.createdAt) || Date.now();
+    const updatedAt = Number(src.updatedAt) || createdAt;
+    return {
+        ...src,
+        id,
+        name: src.name || (id ? `账号${id}` : '账号'),
+        code: src.code || '',
+        platform: src.platform || 'qq',
+        uin: src.uin ? String(src.uin) : '',
+        qq: src.qq ? String(src.qq) : (src.uin ? String(src.uin) : ''),
+        avatar: src.avatar || src.avatarUrl || '',
+        ownerUserId: Number.isFinite(ownerUserId) && ownerUserId > 0 ? ownerUserId : 0,
+        ownerUsername: src.ownerUsername ? String(src.ownerUsername) : '',
+        createdAt,
+        updatedAt,
+    };
+}
+
 function normalizeAccountsData(raw) {
     const data = raw && typeof raw === 'object' ? raw : {};
-    const accounts = Array.isArray(data.accounts) ? data.accounts : [];
+    const source = Array.isArray(data.accounts) ? data.accounts : [];
+    const accounts = source
+        .map(item => normalizeAccountRecord(item))
+        .filter(item => item.id);
     const maxId = accounts.reduce((m, a) => Math.max(m, Number.parseInt(a && a.id, 10) || 0), 0);
     let nextId = Number.parseInt(data.nextId, 10);
     if (!Number.isFinite(nextId) || nextId <= 0) nextId = maxId + 1;
@@ -948,19 +973,34 @@ function addOrUpdateAccount(acc) {
     if (acc.id) {
         const idx = data.accounts.findIndex(a => a.id === acc.id);
         if (idx >= 0) {
-            data.accounts[idx] = { ...data.accounts[idx], ...acc, name: acc.name !== undefined ? acc.name : data.accounts[idx].name, updatedAt: Date.now() };
+            const merged = {
+                ...data.accounts[idx],
+                ...acc,
+                name: acc.name !== undefined ? acc.name : data.accounts[idx].name,
+                ownerUserId: acc.ownerUserId !== undefined ? acc.ownerUserId : data.accounts[idx].ownerUserId,
+                ownerUsername: acc.ownerUsername !== undefined ? acc.ownerUsername : data.accounts[idx].ownerUsername,
+                updatedAt: Date.now(),
+            };
+            data.accounts[idx] = normalizeAccountRecord(merged);
             touchedAccountId = String(data.accounts[idx].id || '');
         }
     } else {
         const id = data.nextId++;
         touchedAccountId = String(id);
-        const defaultName = String(
-            acc.name
-            || acc.nick
-            || (acc.gid ? `GID:${acc.gid}` : '')
-            || '',
-        ).trim() || `账号${id}`;
-        data.accounts.push({
+// 冲突合并后的完整代码片段（含上下文）
+// 先构建原作者的默认名称逻辑
+const defaultName = String(
+    acc.name
+    || acc.nick
+    || (acc.gid ? `GID:${acc.gid}` : '')
+    || '',
+).trim() || `账号${id}`;
+
+// 复用你的标准化函数，同时把默认名称传入（确保名称兜底）
+data.accounts.push(normalizeAccountRecord({
+    ...acc, // 保留原账号所有字段
+    name: acc.name || defaultName // 优先用acc.name，没有则用默认名称
+}));
             id: touchedAccountId,
             name: defaultName,
             code: acc.code || '',
@@ -970,9 +1010,11 @@ function addOrUpdateAccount(acc) {
             uin: acc.uin ? String(acc.uin) : '',
             qq: acc.qq ? String(acc.qq) : (acc.uin ? String(acc.uin) : ''),
             avatar: acc.avatar || acc.avatarUrl || '',
+            ownerUserId: acc.ownerUserId,
+            ownerUsername: acc.ownerUsername,
             createdAt: Date.now(),
             updatedAt: Date.now(),
-        });
+        }));
     }
     saveAccounts(data);
     if (touchedAccountId) {
@@ -990,6 +1032,20 @@ function deleteAccount(id) {
     saveAccounts(data);
     removeAccountConfig(id);
     return data;
+}
+
+function getAccountById(id) {
+    const accountId = String(id || '').trim();
+    if (!accountId) return null;
+    const data = normalizeAccountsData(loadAccounts());
+    return data.accounts.find(a => a.id === accountId) || null;
+}
+
+function listAccountsByOwner(userId) {
+    const id = Number.parseInt(userId, 10);
+    const data = normalizeAccountsData(loadAccounts());
+    if (!Number.isFinite(id) || id <= 0) return [];
+    return data.accounts.filter(a => Number(a.ownerUserId) === id);
 }
 
 module.exports = {
@@ -1020,6 +1076,8 @@ module.exports = {
     getAccounts,
     addOrUpdateAccount,
     deleteAccount,
+    getAccountById,
+    listAccountsByOwner,
     getAdminPasswordHash,
     setAdminPasswordHash,
     getDisablePasswordAuth,
